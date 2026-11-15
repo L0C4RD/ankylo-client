@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey, 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
+import uuid
 
 from keri.core import coring
 
@@ -19,6 +20,8 @@ class Client:
         self.url = url
         self.algorithm = algorithm
 
+        self.session = requests.session()
+
     # Generate GLEIF AID
         self.aid = "lolol"
         if algorithm in (coring.MtrDex.Ed25519, coring.MtrDex.Ed25519N):
@@ -29,16 +32,43 @@ class Client:
             self.private_key = ec.generate_private_key(ec.SECP256K1())
 
     def _post_data(self, endpoint, data:dict):
-        response = requests.post(f"{self.url}/{endpoint}", data=data)
+        response = self.session.post(f"{self.url}/{endpoint}", data=data)
         response.raise_for_status()
         return response.json()
 
+    def create_new_user(self, username:str, password:str):
+
+        print("Creating new user")
+        print(f"{username}:{password}")
+
+        data = self._post_data("api/user/create", {
+            "username" : username,
+            "password" : password
+        })
+
+        return data
+
+    def logout(self):
+
+        print("Logging out.")
+
+        data = self._post_data("api/user/logout", {})
+
+        return data
+
+    def delete(self):
+
+        print("Deleting currently logged in user.")
+
+        data = self._post_data("api/user/delete", {})
+
+        return data
 
     def verify_aid(self):
 
         # generate public key.
 
-        print(1)
+        print("Verifying aid.")
 
         public_key = self.private_key.public_key()
 
@@ -49,15 +79,11 @@ class Client:
 
         public_key_b64 = self.algorithm + Crypto.bytes_to_base64(public_key_bytes)
 
-        print(2)
-
-        data = self._post_data("api/user/verification/challenge_request", {
+        data = self._post_data("api/org/verification/challenge_request", {
             "aid": self.aid,
             "oobi": public_key_b64,
             "poc" : 1
         })
-
-        print(3)
 
         challenge = data.get("challenge")
         challenge_id = data.get("challenge_id")
@@ -68,13 +94,11 @@ class Client:
         else:
             signature = self.private_key.sign(challenge.encode(), ec.ECDSA(hashes.SHA256()))
 
-        print(4)
-
-        return self._post_data("api/user/verification/challenge_response", {
+        return self._post_data("api/org/verification/challenge_response", {
             "challenge_id": challenge_id,
             "signatures": self.algorithm + Crypto.bytes_to_base64(signature)
         })
 
-if __name__ == "__main__":
-    client = Client("http://localhost:5000", coring.MtrDex.Ed25519)
-    print(client.verify_aid())
+
+
+

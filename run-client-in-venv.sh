@@ -15,7 +15,7 @@ set -euo pipefail
 
 # ---- Configuration ----------------------------------------------------
 VENV_DIR=".venv"                # Where the venv lives
-SCRIPT_TO_RUN="client.py"    # The code you want to run inside the venv
+SCRIPT_TO_RUN="run.py"    # The code you want to run inside the venv
 
 
 # ------------------------------------------------------------------------
