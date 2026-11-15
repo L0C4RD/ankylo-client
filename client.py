@@ -33,6 +33,7 @@ class Client:
 
     def _post_data(self, endpoint, data:dict):
         response = self.session.post(f"{self.url}/{endpoint}", data=data)
+        print(response.json())
         response.raise_for_status()
         return response.json()
 
