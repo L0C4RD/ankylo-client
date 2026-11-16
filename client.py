@@ -3,9 +3,9 @@
 
 import requests
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey, Ed25519PrivateKey
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, mldsa, rsa
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 import uuid
 
 from keri.core import coring
@@ -18,18 +18,21 @@ class Client:
 
     def __init__(self, url, algorithm):
         self.url = url
-        self.algorithm = algorithm
-
         self.session = requests.session()
 
-    # Generate GLEIF AID
+        # Generate GLEIF AID
         self.aid = "lolol"
+        self.gleif_key_algorithm = algorithm
         if algorithm in (coring.MtrDex.Ed25519, coring.MtrDex.Ed25519N):
-            self.private_key = Ed25519PrivateKey.generate()
+            self.gleif_private_key = Ed25519PrivateKey.generate()
         elif algorithm in (coring.MtrDex.ECDSA_256r1, coring.MtrDex.ECDSA_256r1N):
-            self.private_key = ec.generate_private_key(ec.SECP256R1())
+            self.gleif_private_key = ec.generate_private_key(ec.SECP256R1())
         elif algorithm in (coring.MtrDex.ECDSA_256k1, coring.MtrDex.ECDSA_256k1N):
-            self.private_key = ec.generate_private_key(ec.SECP256K1())
+            self.gleif_private_key = ec.generate_private_key(ec.SECP256K1())
+
+        # Generate credential keys
+        self.credential_private_key_dh = mldsa.MLDSA44PrivateKey.generate()
+        self.credential_private_key_rsa = rsa.generate_private_key(public_exponent=65537, key_size=3072)
 
     def _post_data(self, endpoint, data:dict):
         response = self.session.post(f"{self.url}/{endpoint}", data=data)
@@ -71,14 +74,14 @@ class Client:
 
         print("Verifying aid.")
 
-        public_key = self.private_key.public_key()
+        public_key = self.gleif_private_key.public_key()
 
         public_key_bytes = public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         )
 
-        public_key_b64 = self.algorithm + Crypto.bytes_to_base64(public_key_bytes)
+        public_key_b64 = self.gleif_key_algorithm + Crypto.bytes_to_base64(public_key_bytes)
 
         data = self._post_data("api/org/verification/challenge_request", {
             "aid": self.aid,
@@ -90,16 +93,53 @@ class Client:
         challenge_id = data.get("challenge_id")
 
         # Sign the challenge with the private key
-        if isinstance(self.private_key, Ed25519PrivateKey):
-            signature = self.private_key.sign(challenge.encode())
+        if isinstance(self.gleif_private_key, Ed25519PrivateKey):
+            signature = self.gleif_private_key.sign(challenge.encode())
         else:
-            signature = self.private_key.sign(challenge.encode(), ec.ECDSA(hashes.SHA256()))
+            signature = self.gleif_private_key.sign(challenge.encode(), ec.ECDSA(hashes.SHA256()))
 
         return self._post_data("api/org/verification/challenge_response", {
             "challenge_id": challenge_id,
-            "signatures": self.algorithm + Crypto.bytes_to_base64(signature)
+            "signatures": self.gleif_key_algorithm + Crypto.bytes_to_base64(signature)
         })
 
 
+    def request_new_credential(self):
+
+        print("Requesting new credential.")
+
+        rsa_public_key = self.credential_private_key_rsa.public_key()
+        mldsa_public_key = self.credential_private_key_dh.public_key()
+
+        rsa_n_hex = hex(rsa_public_key.public_numbers().n)
+        rsa_e_hex = hex(rsa_public_key.public_numbers().e)
+
+        mldsa_public_key_bytes = mldsa_public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        
+        mldsa_public_key_b64 = Crypto.bytes_to_base64(mldsa_public_key_bytes)
 
 
+        data = self._post_data("api/org/credentials/challenge_request#lol", {
+            "aid" : self.aid,
+            "rsa_n" : rsa_n_hex,
+            "rsa_e" : rsa_e_hex,
+            "MLDSA_pub_b64" : mldsa_public_key_b64,
+        })
+
+
+        challenge = data.get("challenge")
+        challenge_id = data.get("challenge_id")
+
+
+        # Sign the challenge with the two private keys
+        rsa_signature = self.credential_private_key_rsa.sign(challenge.encode(), padding.PKCS1v15(), hashes.SHA256())
+        mldsa_signature = self.credential_private_key_dh.sign(challenge.encode())
+
+        return self._post_data("api/org/credentials/challenge_response", {
+            "challenge_id": challenge_id,
+            "rsa_signature" : Crypto.bytes_to_base64(rsa_signature),
+            "MLDSA_signature" : Crypto.bytes_to_base64(mldsa_signature),
+        })

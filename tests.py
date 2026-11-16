@@ -30,3 +30,15 @@ def test_aid_verification():
     print(client.verify_aid())
 
     print(client.delete())
+
+def test_credential_issue():
+
+    client = Client("http://localhost:5000", coring.MtrDex.Ed25519)
+
+    print(client.create_new_user("my_username" + str(uuid.uuid4()), "hunter2"))
+
+    print(client.verify_aid())
+
+    print(client.request_new_credential())
+
+    print(client.delete())
