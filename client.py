@@ -111,21 +111,22 @@ class Client:
         rsa_public_key = self.credential_private_key_rsa.public_key()
         mldsa_public_key = self.credential_private_key_dh.public_key()
 
-        rsa_n_hex = hex(rsa_public_key.public_numbers().n)
-        rsa_e_hex = hex(rsa_public_key.public_numbers().e)
+        rsa_public_key_bytes = rsa_public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
 
         mldsa_public_key_bytes = mldsa_public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         )
-        
+
+        rsa_public_key_b64 = Crypto.bytes_to_base64(rsa_public_key_bytes)
         mldsa_public_key_b64 = Crypto.bytes_to_base64(mldsa_public_key_bytes)
 
-
-        data = self._post_data("api/org/credentials/challenge_request#lol", {
+        data = self._post_data("api/org/attributes/keys/challenge_request", {
             "aid" : self.aid,
-            "rsa_n" : rsa_n_hex,
-            "rsa_e" : rsa_e_hex,
+            "rsa_pub_b64" : rsa_public_key_b64,
             "MLDSA_pub_b64" : mldsa_public_key_b64,
         })
 
@@ -138,7 +139,7 @@ class Client:
         rsa_signature = self.credential_private_key_rsa.sign(challenge.encode(), padding.PKCS1v15(), hashes.SHA256())
         mldsa_signature = self.credential_private_key_dh.sign(challenge.encode())
 
-        return self._post_data("api/org/credentials/challenge_response", {
+        return self._post_data("api/org/attributes/keys/challenge_response", {
             "challenge_id": challenge_id,
             "rsa_signature" : Crypto.bytes_to_base64(rsa_signature),
             "MLDSA_signature" : Crypto.bytes_to_base64(mldsa_signature),
