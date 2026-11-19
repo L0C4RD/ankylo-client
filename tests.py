@@ -39,6 +39,10 @@ def test_credential_issue():
 
     print(client.verify_aid())
 
-    print(client.request_new_credential())
+    print(client.register_credential_signing_keys())
+
+    print(client.create_new_credential())
+
+    print(client.get_credential())
 
     print(client.delete())

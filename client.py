@@ -35,10 +35,13 @@ class Client:
         self.credential_private_key_rsa = rsa.generate_private_key(public_exponent=65537, key_size=3072)
 
     def _post_data(self, endpoint, data:dict):
+        return self._post_data_raw(endpoint, data).json()
+
+    def _post_data_raw(self, endpoint, data:dict):
         response = self.session.post(f"{self.url}/{endpoint}", data=data)
         print(response.json())
         response.raise_for_status()
-        return response.json()
+        return response
 
     def create_new_user(self, username:str, password:str):
 
@@ -103,10 +106,9 @@ class Client:
             "signatures": self.gleif_key_algorithm + Crypto.bytes_to_base64(signature)
         })
 
+    def register_credential_signing_keys(self):
 
-    def request_new_credential(self):
-
-        print("Requesting new credential.")
+        print("Registering new credential signing keys.")
 
         rsa_public_key = self.credential_private_key_rsa.public_key()
         mldsa_public_key = self.credential_private_key_dh.public_key()
@@ -144,3 +146,33 @@ class Client:
             "rsa_signature" : Crypto.bytes_to_base64(rsa_signature),
             "MLDSA_signature" : Crypto.bytes_to_base64(mldsa_signature),
         })
+
+
+    def create_new_credential(self):
+
+        print("Creating new credential.")
+
+        data = self._post_data("api/org/credentials/create", {
+            "aid": self.aid
+        })
+
+        cid = data.get("cid")
+
+        if cid:
+            self.cid = cid
+
+        return data
+
+    def get_credential(self):
+
+        print("Getting credential for CID:", self.cid)
+
+        if not self.cid:
+            raise ValueError("Credential ID (cid) is not set.")
+
+        data = self._post_data_raw("api/org/credentials/issue", {
+            "aid": self.aid,
+            "cid": self.cid
+        })
+
+        return data
